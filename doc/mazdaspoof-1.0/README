@@ -1,0 +1,8 @@
+MazdaSpoof - A tape-deck simulator
+
+To build decend into ./src/ and run ./build.sh
+
+Program your AVR with avrdude and a BSD programmer[1]:
+  avrdude -p t45 -c bsd -U flash:w:spoof.hex
+
+[1] http://www.bsdhome.com/avrdude/
