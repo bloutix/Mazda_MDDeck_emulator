@@ -69,11 +69,13 @@ typedef enum SubConmmandPlayback_e {
 } SubConmmandPlayback_t;
 
 typedef enum SubCommandSetConfig_e {
-  SetConfig_RepeatMode = 0x01,
+  SetConfig_RepeatMode = 0x40, //0x01 for tape desk and 0x40 for disk
   SetConfig_RandomMode = 0x02,
-  SetConfig_FastForwarding = 0x10,
-  SetConfig_FastRewinding = 0x20
+  SetConfig_FastForwarding = 0x10,  //for tape only
+  SetConfig_FastRewinding = 0x20,  //for tape only
+  SetConfig_ScanMode = 0x08 //for disk only
 } SubCommandSetConfig_t;
+
 
 // data present in nibbles, byte equal nibble
 //Wakeup notification
@@ -81,22 +83,22 @@ const uint8_t MDCMD_POWER_ON[] =          {0x0F, 0x08, 0x01, 0x07};         //Wa
 //Status messages: {target, command(status), arg1, arg2, checksum}
 const uint8_t MDCMD_STOPPED[] =           {0x0F, 0x09, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0C, 0x0C};   //0 - Stopped, C - not use desk
 const uint8_t MDCMD_PLAYING[] =           {0x0F, 0x09, 0x04, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x04};   //4 - Playing, 1 - tape in use
-const uint8_t MDCMD_SEEKINGFF[] =           {0x0F, 0x09, 0x05, 0x00, 0x02, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x01};   //5 - seeking, 1 - tape in use
-const uint8_t MDCMD_SEEKINGREW[] =           {0x0F, 0x09, 0x05, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x04};   //5 - seeking, 1 - tape in use
+const uint8_t MDCMD_SEEKING[] =           {0x0F, 0x09, 0x05, 0x00, 0x02, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x01};   //5 - seeking, 1 - tape in use
 
 //Detailed status  {target, command(det. status), arg1, arg2, arg3, arg4, arg5, arg6, checksum}
 const uint8_t MDCMD_DISC_PRESENT[] =      {0x0F, 0x0B, 0x09, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0C, 0x01};
 const uint8_t MDCMD_PLAYBACK[] =          {0x0F, 0x0B, 0x09, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x0E};
-/*const uint8_t TAPECMD_RANDOM_PLAY[] =     {0x08, 0x0B, 0x09, 0x00, 0x06, 0x01, 0x00, 0x01, 0x0D};
-const uint8_t TAPECMD_REPEAT_PLAY[] =     {0x08, 0x0B, 0x09, 0x00, 0x05, 0x01, 0x00, 0x01, 0x00};
-*/
+
 const uint8_t MDCMD_FAST_REWIND[] =     {0x0F, 0x09, 0x07, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x0};
 const uint8_t MDCMD_FAST_FORWARD[] =    {0x0F, 0x09, 0x06, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x0};
 
 //disc info
-const uint8_t MDCMD_DISCINFO[] =    {0x0F, 0x0C, 0x01, 0x00, 0x01, 0x01, 0x00, 0x04, 0x01, 0x03, 0x08, 0x0F, 0x04};
+//                                   addr,dinfo,cd0/1,1sttracknbr,endtrachnbr,totalminute,totalsecond,
+const uint8_t MDCMD_DISCINFO[] =    {0x0F, 0x0C, 0x01, 0x00, 0x01, 0x00, 0x0F, 0x04, 0x01, 0x03, 0x08, 0x0F, 0x0E};
 //unknown message
 const uint8_t MDCMD_UNKNOWN[] =     {0x0F, 0x0D, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x0C};
+//first wakeup message at anybodyhome
+const uint8_t MDCMD_FIRSTWAKEUP[] = {0x0F, 0x0B, 0x0A, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x0C, 0x05};
 
 static uint8_t inNibblesBuffer[IN_BUFFER_SIZE] = {0U};
 static uint8_t nibblesReceived = 0;
@@ -104,7 +106,47 @@ static uint8_t biteShiftMask = NIBBLE_RESET_BIT_POS;
 static uint32_t rx_time_us = 0;
 static uint32_t rx_time_ms = 0;
 
-//static bool ipod_seeking = false;
+//##################Checksum calc############################
+/* Usage exemple:
+    size_t length = sizeof(data) - 1; // Exclure le LRC de la taille totale
+    appendLRC(data, length);
+*/
+uint8_t calculateLRC(uint8_t *data, size_t length) {
+    uint8_t lrc = 0;
+
+    for (size_t i = 0; i < length; ++i) {
+        lrc ^= data[i];
+    }
+    lrc = (lrc+1)&0x0F;
+    return lrc;
+}
+void appendLRC(uint8_t *data, size_t length) {
+    uint8_t lrc = calculateLRC(data, length);
+
+    // Ajouter le LRC à la fin du tableau
+    data[length] = lrc;
+}
+//################END Checksum #############################
+//tracknb,repeatmode,randommmode,
+uint8_t playconf[] = {0x00,0x01,0x00,0x00};
+
+//this update cmdarray with current track number, and mode
+void appendtracknbr(uint8_t *data, size_t length)
+{
+  /*uint8_t data2[length];
+  memcpy(data2, data, sizeof(data[0])*length);
+  //arg3,4 in array is track*/
+  data[3]=playconf[0]; //tracknb[0];
+  data[4]=playconf[1];  //tracknb[1];
+  data[11]=playconf[2]; //rptmode;
+  data[12]=playconf[3]; //rdmmode;
+
+  //checksum update
+  //size_t length2 = sizeof(data2) - 1; // Exclure le LRC de la taille totale
+  appendLRC(data, length-1);
+
+  return data;
+}
 
 
 void setup() {
@@ -119,6 +161,7 @@ void setup() {
 #endif
 
   DEBUG_PRINT("Init....\r\n");
+  send_message(MDCMD_POWER_ON, sizeof(MDCMD_POWER_ON));
 }
 
 void loop() {
@@ -251,82 +294,150 @@ void send_message(const uint8_t *message, const uint8_t lenght) {
 
 void process_radio_message(const rxMessage_t *message) {
   //check target, 0 is tape desk
-  if (message->target != 7) {
+  /*if (message->target != Target_MDDesk || message->target != Target_TapeDesk) {
     return;
-  }
+  }*/
 
   switch (message->command) {
     case Command_AnyBodyHome:
       DEBUG_PRINT("Any body home msg\r\n");
-
       send_message(MDCMD_POWER_ON, sizeof(MDCMD_POWER_ON));
-      send_message(MDCMD_DISC_PRESENT, sizeof(MDCMD_DISC_PRESENT));
-      send_message(MDCMD_DISCINFO, sizeof(MDCMD_DISCINFO));
-      send_message(MDCMD_UNKNOWN, sizeof(MDCMD_UNKNOWN));
+      //delay(8);
+      //send_message(MDCMD_FIRSTWAKEUP, sizeof(MDCMD_FIRSTWAKEUP));
+
       break;
     case Command_WakeUp:
       DEBUG_PRINT("Wake up msg\r\n");
 
       send_message(MDCMD_DISC_PRESENT, sizeof(MDCMD_DISC_PRESENT));
-      send_message(MDCMD_DISCINFO, sizeof(MDCMD_DISCINFO));
+      delay(8);
       send_message(MDCMD_UNKNOWN, sizeof(MDCMD_UNKNOWN));
-      send_message(MDCMD_STOPPED, sizeof(MDCMD_STOPPED));
+      delay(8);
+      send_message(MDCMD_DISCINFO, sizeof(MDCMD_DISCINFO));
+      //delay(8);
+      //send_message(MDCMD_STOPPED, sizeof(MDCMD_STOPPED));
       break;
     case Command_Control:
       if (message->data[0] == SubCommand_Playback) {
         uint8_t subCmd = ((message->data[1] << 4U) & 0xF0) | (message->data[2] & 0x0F);
         if (subCmd == Playback_Play) {
           DEBUG_PRINT("Playback MSG = Playback_Play\r\n");
-          send_message(MDCMD_PLAYING, sizeof(MDCMD_PLAYING));
-          send_message(MDCMD_PLAYBACK, sizeof(MDCMD_PLAYBACK));
+          appendtracknbr(MDCMD_PLAYING, sizeof(MDCMD_PLAYING));
+          send_message(MDCMD_PLAYING, sizeof(MDCMD_PLAYING));  //append playing message with new track number   
+          delay(8);
+          appendtracknbr(MDCMD_SEEKING, sizeof(MDCMD_SEEKING));
+          send_message(MDCMD_SEEKING, sizeof(MDCMD_SEEKING));  //append playing message with new track number   
+          delay(8);
+          appendtracknbr(MDCMD_PLAYING, sizeof(MDCMD_PLAYING));
+          send_message(MDCMD_PLAYING, sizeof(MDCMD_PLAYING));  //append playing message with new track number   
           //Keyboard.write('X');
-          //IpodControl(Ipod_Play);
         } else if (subCmd == Playback_FF) {
-          DEBUG_PRINT("Playback MSG = Playback_FF\r\n");
-          send_message(MDCMD_SEEKINGFF, sizeof(MDCMD_SEEKINGFF));
-          send_message(MDCMD_PLAYING, sizeof(MDCMD_PLAYING));
-          send_message(MDCMD_PLAYBACK, sizeof(MDCMD_PLAYBACK));
           Keyboard.write('N');
-          //IpodControl(Ipod_Nççext);
+          DEBUG_PRINT("Playback MSG = Playback_FF\r\n");
+          //must make function append for track number et timing
+          appendtracknbr(MDCMD_FAST_FORWARD, sizeof(MDCMD_FAST_FORWARD));
+          send_message(MDCMD_FAST_FORWARD, sizeof(MDCMD_FAST_FORWARD)); //upgrade to follow tracking number?
+          delay(8);
+          appendtracknbr(MDCMD_PLAYING, sizeof(MDCMD_PLAYING));
+          send_message(MDCMD_PLAYING, sizeof(MDCMD_PLAYING));  //append playing message with new track number 
+
         } else if (subCmd == Playback_REW) {
-          DEBUG_PRINT("Playback MSG = Playback_REW\r\n");
-          send_message(MDCMD_SEEKINGREW, sizeof(MDCMD_SEEKINGREW));
-          send_message(MDCMD_PLAYING, sizeof(MDCMD_PLAYING));
-          send_message(MDCMD_PLAYBACK, sizeof(MDCMD_PLAYBACK));
           Keyboard.write('V');
-          //IpodControl(Ipod_Prev);
+          DEBUG_PRINT("Playback MSG = Playback_REW\r\n");
+          //must make function append for track number et timing
+          appendtracknbr(MDCMD_FAST_REWIND, sizeof(MDCMD_FAST_REWIND));
+          send_message(MDCMD_FAST_REWIND, sizeof(MDCMD_FAST_REWIND)); //upgrade to follow tracking number?
+          delay(8);
+          appendtracknbr(MDCMD_PLAYING, sizeof(MDCMD_PLAYING));
+          send_message(MDCMD_PLAYING, sizeof(MDCMD_PLAYING));  //append playing message with new track number   
         } else if (subCmd == Playback_Stop) {
           DEBUG_PRINT("Playback MSG = Playback_Stop\r\n");
           send_message(MDCMD_STOPPED, sizeof(MDCMD_STOPPED));
           Keyboard.write('C');
-          //IpodControl(Ipod_Pause);
+
         } else {
           DEBUG_PRINT("Playbçack MSG = ");
           DEBUG_PRINT(subCmd);
           DEBUG_PRINT("\r\n");
         }
-      } else if (message->data[0] == SubCommand_SeekTrack) {
+      } else if (message->data[0] == SubCommand_SeekTrack) {  //format is 0KK1 where kk is track number we need to put message into var
+        if (message->data[3]==15 && playconf[1]==1){
+              Keyboard.write('V');
+        } else if (message->data[3]==1 && playconf[1]==15){
+          Keyboard.write('N');
+        } else if(message->data[3]>playconf[1]){
+            Keyboard.write('N');
+        } else if (message->data[3]<playconf[1]) {
+              //go to previous track
+              Keyboard.write('V');
+        } 
+        
         DEBUG_PRINT("SubCommand_SeekTrack\r\n");
-        send_message(MDCMD_SEEKINGFF, sizeof(MDCMD_SEEKINGFF));
-        send_message(MDCMD_PLAYBACK, sizeof(MDCMD_PLAYBACK));   
+        //store news track number
+        //playconf[0] = message->data[2];
+        playconf[1] = message->data[3];
+
+        appendtracknbr(MDCMD_SEEKING, sizeof(MDCMD_SEEKING));  //append seeking message with new track number
+        send_message(MDCMD_SEEKING, sizeof(MDCMD_SEEKING));
+        delay(8);
+        appendtracknbr(MDCMD_PLAYING, sizeof(MDCMD_PLAYING));  //append playing message with new track number   
+        send_message(MDCMD_PLAYING, sizeof(MDCMD_PLAYING));
+
       } else if (message->data[0] == SubCommand_SetConfig) {
         uint8_t subCmd = ((message->data[1] << 4U) & 0xF0) | (message->data[2] & 0x0F);
         if ( subCmd == SetConfig_RepeatMode) {
-          DEBUG_PRINT("SetConfig_RepeatMode\r\n");
-          //IpodControl(Ipod_Repeat);
+          DEBUG_PRINT("Enable RepeatMode\r\n");
+          playconf[2]=0x04; //enable repeat mode
+          /*if(rptmode!=0x04) {
+            rptmode=0x04;
+          } else {
+            rptmode=0x00;
+          }*/
+          appendtracknbr(MDCMD_PLAYING, sizeof(MDCMD_PLAYING));
+          send_message(MDCMD_PLAYING, sizeof(MDCMD_PLAYING));  //append playing message with new track number 
+          //delay(8);
+          //send_message(MDCMD_PLAYING, sizeof(MDCMD_PLAYING));  //append playing message with new track number     
+
         } else if ( subCmd == SetConfig_RandomMode) {
-          DEBUG_PRINT("SetConfig_RandomMode\r\n");
-          //IpodControl(Ipod_Shuffle);
+          DEBUG_PRINT("Enable Random\r\n");
+          playconf[3]=0x02; //enable random
+          /*if(rdmmode!=0x02) {
+            rdmmode=0x02;
+          } else {
+            rdmmode=0x00;
+          }*/
+          appendtracknbr(MDCMD_SEEKING, sizeof(MDCMD_SEEKING));  //append seeking message with new track number
+          send_message(MDCMD_SEEKING, sizeof(MDCMD_SEEKING));
+          delay(8);
+          appendtracknbr(MDCMD_PLAYING, sizeof(MDCMD_PLAYING));
+          send_message(MDCMD_PLAYING, sizeof(MDCMD_PLAYING));  //append playing message with new track number   
+          //delay(8);
+          //send_message(MDCMD_PLAYING, sizeof(MDCMD_PLAYING));  //append playing message with new track number   
+
         } else if ( subCmd == SetConfig_FastForwarding) {
           DEBUG_PRINT("SetConfig_FastForwarding\r\n");
           Keyboard.write('N');
           send_message(MDCMD_FAST_FORWARD, sizeof(MDCMD_FAST_FORWARD));
-          send_message(MDCMD_PLAYBACK, sizeof(MDCMD_PLAYBACK));
+          delay(8);
+          send_message(MDCMD_PLAYING, sizeof(MDCMD_PLAYING));
+
         } else if ( subCmd == SetConfig_FastRewinding ) {
           DEBUG_PRINT("SetConfig_FastRewinding\r\n");
           Keyboard.write('V');
           send_message(MDCMD_FAST_REWIND, sizeof(MDCMD_FAST_REWIND));
-          send_message(MDCMD_PLAYBACK, sizeof(MDCMD_PLAYBACK));    
+          delay(8);
+          send_message(MDCMD_PLAYING, sizeof(MDCMD_PLAYING));   
+          
+        } else if ( subCmd == 0x00 ) {
+          DEBUG_PRINT("Disable RepeatRandom\r\n");
+          playconf[2]=0x00; //disable repeat
+          playconf[3]=0x00; //disable random
+          /*rptmode=0x00;
+          rdmmode=0x00;*/
+          appendtracknbr(MDCMD_PLAYING, sizeof(MDCMD_PLAYING));
+          send_message(MDCMD_PLAYING, sizeof(MDCMD_PLAYING));  //append playing message with new track number 
+          //delay(8);
+          //send_message(MDCMD_PLAYING, sizeof(MDCMD_PLAYING));  //append playing message with new track number     
         } else {
           DEBUG_PRINT("SubCommand_SetConfig = ");
           DEBUG_PRINT(subCmd);
@@ -357,5 +468,5 @@ void send_byte( uint8_t c ) {
     }
     c >>= 1;
   }
-  delayMicroseconds(30); // Wait at least 10 us between bytes
+  delayMicroseconds(10); //30 Wait at least 10 us between bytes
 }
