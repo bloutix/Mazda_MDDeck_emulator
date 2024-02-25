@@ -1,5 +1,5 @@
 # Mazda_MDDeck_emulator
-Emulator for MD Desk input on Mazda 6 and Mazda RX8 radio main unit
+Emulator for MD Deck input on Mazda 6 and Mazda RX8 radio main unit
 
 this is work in progress based on Nikosapi work about Mazda tape deck emulator and Mazda Radio BUS protocol
 
