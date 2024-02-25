@@ -1,12 +1,12 @@
-//Mazda MDdesk emulator based on tapedesk emulator
+//Mazda MDdeck emulator based on tapedeck emulator
 /*
 Adress calc for send from to base unit:
     tapedesk to base unit =>0x00 + 0x08 = 0x08
-    CDdesk to BU => 0x03+0x08 => 0x0B
-    MDdesk to BU => 0x07+0x08 = 0x0F
+    CDdeck to BU => 0x03+0x08 => 0x0B
+    MDdeck to BU => 0x07+0x08 = 0x0F
 Checksum calc formula => (b1^b2^b3)+1)&0x0F
-view nikosapi website for more detail
-*/
+view nikosapi website for more detail*/
+
 //Configuration
 #include "Keyboard.h"
 #define ENABLE_DEBUG_OUTPUT
@@ -109,8 +109,8 @@ static uint32_t rx_time_ms = 0;
 //##################Checksum calc############################
 /* Usage exemple:
     size_t length = sizeof(data) - 1; // Exclure le LRC de la taille totale
-    appendLRC(data, length);
-*/
+    appendLRC(data, length);*/
+
 uint8_t calculateLRC(uint8_t *data, size_t length) {
     uint8_t lrc = 0;
 
@@ -133,9 +133,6 @@ uint8_t playconf[] = {0x00,0x01,0x00,0x00};
 //this update cmdarray with current track number, and mode
 void appendtracknbr(uint8_t *data, size_t length)
 {
-  /*uint8_t data2[length];
-  memcpy(data2, data, sizeof(data[0])*length);
-  //arg3,4 in array is track*/
   data[3]=playconf[0]; //tracknb[0];
   data[4]=playconf[1];  //tracknb[1];
   data[11]=playconf[2]; //rptmode;
@@ -388,11 +385,7 @@ void process_radio_message(const rxMessage_t *message) {
         if ( subCmd == SetConfig_RepeatMode) {
           DEBUG_PRINT("Enable RepeatMode\r\n");
           playconf[2]=0x04; //enable repeat mode
-          /*if(rptmode!=0x04) {
-            rptmode=0x04;
-          } else {
-            rptmode=0x00;
-          }*/
+            
           appendtracknbr(MDCMD_PLAYING, sizeof(MDCMD_PLAYING));
           send_message(MDCMD_PLAYING, sizeof(MDCMD_PLAYING));  //append playing message with new track number 
           //delay(8);
@@ -401,11 +394,7 @@ void process_radio_message(const rxMessage_t *message) {
         } else if ( subCmd == SetConfig_RandomMode) {
           DEBUG_PRINT("Enable Random\r\n");
           playconf[3]=0x02; //enable random
-          /*if(rdmmode!=0x02) {
-            rdmmode=0x02;
-          } else {
-            rdmmode=0x00;
-          }*/
+          
           appendtracknbr(MDCMD_SEEKING, sizeof(MDCMD_SEEKING));  //append seeking message with new track number
           send_message(MDCMD_SEEKING, sizeof(MDCMD_SEEKING));
           delay(8);
@@ -432,8 +421,7 @@ void process_radio_message(const rxMessage_t *message) {
           DEBUG_PRINT("Disable RepeatRandom\r\n");
           playconf[2]=0x00; //disable repeat
           playconf[3]=0x00; //disable random
-          /*rptmode=0x00;
-          rdmmode=0x00;*/
+            
           appendtracknbr(MDCMD_PLAYING, sizeof(MDCMD_PLAYING));
           send_message(MDCMD_PLAYING, sizeof(MDCMD_PLAYING));  //append playing message with new track number 
           //delay(8);
